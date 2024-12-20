@@ -1,20 +1,4 @@
-{
-    "name": "node",
-    "version": "1.0.0",
-    "description": "",
-    "main": "app.js",
-    "scripts": {
-      "start": "node app.js"
-    },
-    "author": "",
-    "license": "ISC",
-    "dependencies": {
-      "ejs": "^3.1.10",
-      "express": "^4.21.1",
-      "express-session": "^1.18.1",
-      "openid-client": "^5.7.0"
-    }
-  }
+
 //Configure openid-client with values for the OIDC properties of your user pool
 const express = require('express');
 const session = require('express-session');
@@ -114,32 +98,4 @@ app.get('/logout', (req, res) => {
     res.redirect(logoutUrl);
 });
 
-//12 Configure the home page with a sign-in link that directs to the login route and a sign-out link that directs to the logout route.
-<!-- views/home.ejs -->
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Amazon Cognito authentication with Node example</title>
-</head>
-<body>
-<div>
-    <h1>Amazon Cognito User Pool Demo</h1>
-
-    <% if (isAuthenticated) { %>
-        <div>
-            <h2>Welcome, <%= userInfo.username || userInfo.email %></h2>
-            <p>Here are some attributes you can use as a developer:</p>
-            <p><%= JSON.stringify(userInfo, null, 4) %></p>
-        </div>
-        <a href="/logout">Logout</a>
-    <% } else { %>
-        <p>Please log in to continue</p>
-        <a href="/login">Login</a>
-    <% } %>
-</div>
-</body>
-</html>
-
-//Configure the Node view engine.
 app.set('view engine', 'ejs');
-
