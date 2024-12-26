@@ -1,6 +1,13 @@
-import Button from "../src/components/Button";
+import React from 'react';
+import Button from "./components/Button";
+import Nav from './components/nav/Nav';
 
 function App(){
-  return <div><Button/></div>
+  return (
+  <div>
+    <Nav />
+    <Button/>
+    </div>
+  )
 }
 export default App;
