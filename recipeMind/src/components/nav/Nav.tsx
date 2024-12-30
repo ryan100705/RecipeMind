@@ -1,6 +1,7 @@
 import React from 'react'
 import styles from "./Nav.module.css";
 import logo from "/images/Logo.png";
+import {Link} from "react-router-dom";
 
 const Nav: React.FC<{}> = () => {
     return (
@@ -10,13 +11,13 @@ const Nav: React.FC<{}> = () => {
             </div>
             <div className={styles['links-container']}>
                 <div className={styles['link']}>
-                    <a href="/home">Home</a>
+                    <Link to="/Home">Home</Link>
                 </div>
                 <div className={styles['link']}>
-                    <a href="/map">Map</a>
+                    <Link to="/Map">Map</Link>
                 </div>
                 <div className={styles['link']}>
-                    <a href="/login">Sign Out</a>
+                    <Link to="/SignIn">Sign In</Link>
                 </div>
             </div>
         </nav>
