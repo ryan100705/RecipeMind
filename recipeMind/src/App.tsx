@@ -13,7 +13,6 @@ const App = () => {
     <BrowserRouter>
     <div>
       <Nav />
-      <Button/>
     </div>
     <Routes>
       <Route path="/Home" element={<Home />} />
