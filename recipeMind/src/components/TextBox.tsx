@@ -6,7 +6,7 @@ function TextBox(): JSX.Element {
   const [name, setName] = useState<string>("");
   return(
     <div>
-
+      <h2>Enter</h2>
       <form action="">
         <input 
           type="text" 
