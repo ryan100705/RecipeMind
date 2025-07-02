@@ -52,36 +52,42 @@ const UserLocationMap: React.FC = () => {
   const [Loc, setLoc] = useState<[number, number] | null>(null);
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([
-    "supermarket",
-    "convenience",
-    "grocery",
-  ]);
+  const [searchRadius, setSearchRadius] = useState(2000); // Default 2km
 
-  const categories = {
-    supermarket: { color: "#27AE60", label: "Supermarkets" },
-    convenience: { color: "#3498DB", label: "Convenience Stores" },
-    grocery: { color: "#E74C3C", label: "Grocery Stores" },
-    butcher: { color: "#8E44AD", label: "Butcher Shops" },
-    bakery: { color: "#F39C12", label: "Bakeries" },
-    greengrocer: { color: "#2ECC71", label: "Fruit & Vegetables" },
-    deli: { color: "#E67E22", label: "Delis" },
-    organic: { color: "#16A085", label: "Organic Stores" },
+  // Helper function to format radius for display
+  const formatRadius = (radius: number): string => {
+    if (radius >= 1000) {
+      return `${(radius / 1000).toFixed(1)}km`;
+    }
+    return `${radius}m`;
   };
 
-  const fetchNearbyPlaces = async (lat: number, lon: number) => {
+  const fetchNearbyPlaces = async (
+    lat: number,
+    lon: number,
+    radius: number = searchRadius
+  ) => {
     setLoading(true);
     try {
       // Add delay to avoid rate limiting
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Simplified query to reduce load on API
-      const radius = 2000;
+      // Query for supermarkets, grocery stores, wholesale stores, and supercenters - more precise filtering
       const query = `
         [out:json][timeout:30];
         (
-          node["shop"~"supermarket|convenience|grocery|department_store"](around:${radius},${lat},${lon});
-          way["shop"~"supermarket|convenience|grocery|department_store"](around:${radius},${lat},${lon});
+          node["shop"="supermarket"](around:${radius},${lat},${lon});
+          way["shop"="supermarket"](around:${radius},${lat},${lon});
+          node["shop"="grocery"](around:${radius},${lat},${lon});
+          way["shop"="grocery"](around:${radius},${lat},${lon});
+          node["shop"="wholesale"](around:${radius},${lat},${lon});
+          way["shop"="wholesale"](around:${radius},${lat},${lon});
+          node["shop"="convenience"](around:${radius},${lat},${lon});
+          way["shop"="convenience"](around:${radius},${lat},${lon});
+          node["shop"="department_store"]["name"~"Target|Walmart|Meijer|Kmart"](around:${radius},${lat},${lon});
+          way["shop"="department_store"]["name"~"Target|Walmart|Meijer|Kmart"](around:${radius},${lat},${lon});
+          node["brand"~"Target|Walmart|Costco|Sam's Club|BJ's Wholesale Club|Meijer|Kroger|Safeway|Publix|H-E-B|Wegmans|Giant|Stop & Shop"](around:${radius},${lat},${lon});
+          way["brand"~"Target|Walmart|Costco|Sam's Club|BJ's Wholesale Club|Meijer|Kroger|Safeway|Publix|H-E-B|Wegmans|Giant|Stop & Shop"](around:${radius},${lat},${lon});
         );
         out center;
       `;
@@ -128,13 +134,105 @@ const UserLocationMap: React.FC = () => {
 
           if (!lat || !lon) return null;
 
+          // Filter out non-grocery establishments
+          if (element.tags) {
+            // Exclude restaurants, cafes, bars, and other food service
+            if (
+              element.tags.amenity &&
+              [
+                "restaurant",
+                "cafe",
+                "bar",
+                "pub",
+                "fast_food",
+                "food_court",
+              ].includes(element.tags.amenity)
+            ) {
+              return null;
+            }
+
+            // Exclude clothing, electronics, and other non-food shops
+            if (
+              element.tags.shop &&
+              [
+                "clothes",
+                "electronics",
+                "furniture",
+                "hardware",
+                "books",
+                "toys",
+                "sports",
+                "jewelry",
+                "shoes",
+                "beauty",
+                "mobile_phone",
+                "car",
+                "bicycle",
+              ].includes(element.tags.shop)
+            ) {
+              return null;
+            }
+
+            // Only include if it's clearly a food retail establishment
+            const isGroceryStore =
+              element.tags.shop &&
+              ["supermarket", "grocery", "wholesale", "convenience"].includes(
+                element.tags.shop
+              );
+            const isKnownBrand =
+              element.tags.brand &&
+              /target|walmart|costco|sam's club|bj's|meijer|kroger|safeway|publix|h-e-b|wegmans|giant|stop & shop/i.test(
+                element.tags.brand
+              );
+            const isDepartmentStoreWithFood =
+              element.tags.shop === "department_store" &&
+              element.tags.name &&
+              /target|walmart|meijer|kmart/i.test(element.tags.name);
+
+            if (
+              !isGroceryStore &&
+              !isKnownBrand &&
+              !isDepartmentStoreWithFood
+            ) {
+              return null;
+            }
+          }
+
           let name = "Store";
+          let storeType = "grocery";
+
           if (element.tags) {
             name =
               element.tags.name ||
               element.tags.brand ||
-              element.tags.shop ||
-              "Grocery Store";
+              (element.tags.shop === "supermarket"
+                ? "Supermarket"
+                : element.tags.shop === "wholesale"
+                ? "Wholesale Store"
+                : element.tags.shop === "convenience"
+                ? "Convenience Store"
+                : element.tags.shop === "department_store"
+                ? "Supercenter"
+                : "Grocery Store");
+
+            // Determine store type based on tags
+            if (element.tags.shop === "convenience") {
+              storeType = "convenience";
+            } else if (
+              element.tags.shop === "department_store" ||
+              (element.tags.name &&
+                /target|walmart|costco|sam's club|bj's|meijer/i.test(
+                  element.tags.name
+                )) ||
+              (element.tags.brand &&
+                /target|walmart|costco|sam's club|bj's|meijer/i.test(
+                  element.tags.brand
+                ))
+            ) {
+              storeType = "supercenter";
+            } else {
+              storeType = element.tags.shop || "grocery";
+            }
           }
 
           return {
@@ -142,11 +240,11 @@ const UserLocationMap: React.FC = () => {
             lat: lat,
             lon: lon,
             name: name,
-            type: element.tags?.shop || "grocery",
+            type: storeType,
             amenity: element.tags?.amenity,
             shop: element.tags?.shop,
             brand: element.tags?.brand,
-            category: element.tags?.shop || "grocery",
+            category: storeType,
           };
         })
         .filter((place) => place !== null)
@@ -186,7 +284,7 @@ const UserLocationMap: React.FC = () => {
           position.coords.longitude,
         ];
         setLoc(location);
-        fetchNearbyPlaces(location[0], location[1]);
+        fetchNearbyPlaces(location[0], location[1], searchRadius);
       },
       (error) => {
         console.error("Geolocation error:", error);
@@ -200,26 +298,39 @@ const UserLocationMap: React.FC = () => {
     );
   }, []);
 
-  useEffect(() => {
-    if (Loc) {
-      fetchNearbyPlaces(Loc[0], Loc[1]);
-    }
-  }, [selectedCategories]);
-
   const getMarkerColor = (place: NearbyPlace): string => {
-    if (place.shop && categories[place.shop as keyof typeof categories]) {
-      return categories[place.shop as keyof typeof categories].color;
+    // Different colors for different store types
+    switch (place.type) {
+      case "supermarket":
+        return "#27AE60"; // Green for supermarkets
+      case "wholesale":
+        return "#3498DB"; // Blue for wholesale stores
+      case "convenience":
+        return "#F39C12"; // Yellow for convenience stores
+      case "supercenter":
+      case "department_store":
+        return "#9B59B6"; // Purple for supercenters
+      case "grocery":
+      default:
+        return "#E67E22"; // Orange for grocery stores
     }
-    // Default green for any grocery-related store not in our specific categories
-    return "#27AE60";
   };
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category]
-    );
+  const getStoreIcon = (storeType: string): string => {
+    switch (storeType) {
+      case "supermarket":
+        return "🏪";
+      case "wholesale":
+        return "🏬";
+      case "convenience":
+        return "🏪";
+      case "supercenter":
+      case "department_store":
+        return "🏢";
+      case "grocery":
+      default:
+        return "🛒";
+    }
   };
 
   return (
@@ -238,14 +349,16 @@ const UserLocationMap: React.FC = () => {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: "10px",
+            marginBottom: "15px",
           }}
         >
           <h3 style={{ margin: 0, fontSize: "16px" }}>
-            Grocery Stores Near You
+            Supermarkets, Grocery, Wholesale & Supercenters
           </h3>
           <button
-            onClick={() => Loc && fetchNearbyPlaces(Loc[0], Loc[1])}
+            onClick={() =>
+              Loc && fetchNearbyPlaces(Loc[0], Loc[1], searchRadius)
+            }
             disabled={loading || !Loc}
             style={{
               padding: "8px 16px",
@@ -262,34 +375,81 @@ const UserLocationMap: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-          {Object.entries(categories).map(([key, { color, label }]) => (
+        {/* Range Filter */}
+        <div style={{ marginBottom: "15px" }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: "14px",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#333",
+            }}
+          >
+            Search Radius: {formatRadius(searchRadius)}
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <input
+              type="range"
+              min="500"
+              max="5000"
+              step="250"
+              value={searchRadius}
+              onChange={(e) => setSearchRadius(Number(e.target.value))}
+              style={{
+                flex: 1,
+                height: "6px",
+                borderRadius: "3px",
+                background: "#ddd",
+                outline: "none",
+                cursor: "pointer",
+              }}
+            />
             <button
-              key={key}
-              onClick={() => toggleCategory(key)}
+              onClick={() =>
+                Loc && fetchNearbyPlaces(Loc[0], Loc[1], searchRadius)
+              }
+              disabled={loading || !Loc}
               style={{
                 padding: "6px 12px",
-                backgroundColor: selectedCategories.includes(key)
-                  ? color
-                  : "#ffffff",
-                color: selectedCategories.includes(key) ? "white" : "#333",
-                border: `2px solid ${color}`,
-                borderRadius: "20px",
-                cursor: "pointer",
+                backgroundColor: loading ? "#ccc" : "#3498DB",
+                color: "white",
+                border: "none",
+                borderRadius: "15px",
+                cursor: loading ? "not-allowed" : "pointer",
                 fontSize: "12px",
                 fontWeight: "bold",
               }}
             >
-              {label}
+              Update
             </button>
-          ))}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ marginTop: "10px", fontSize: "12px", color: "#666" }}>
+          <span style={{ marginRight: "12px" }}>
+            <span style={{ color: "#27AE60" }}>●</span> Supermarkets
+          </span>
+          <span style={{ marginRight: "12px" }}>
+            <span style={{ color: "#E67E22" }}>●</span> Grocery
+          </span>
+          <span style={{ marginRight: "12px" }}>
+            <span style={{ color: "#F39C12" }}>●</span> Convenience
+          </span>
+          <span style={{ marginRight: "12px" }}>
+            <span style={{ color: "#3498DB" }}>●</span> Wholesale
+          </span>
+          <span>
+            <span style={{ color: "#9B59B6" }}>●</span> Supercenters
+          </span>
         </div>
 
         {loading && (
           <div
             style={{ margin: "10px 0 0 0", fontSize: "14px", color: "#666" }}
           >
-            <p style={{ margin: 0 }}>🔍 Searching for grocery stores...</p>
+            <p style={{ margin: 0 }}>🔍 Searching for stores...</p>
             <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#888" }}>
               This may take a few seconds. If you get an error, please wait
               30-60 seconds before trying again.
@@ -333,17 +493,68 @@ const UserLocationMap: React.FC = () => {
           >
             <Popup>
               <div>
-                <strong>{place.name}</strong>
+                <strong>
+                  {getStoreIcon(place.type)} {place.name}
+                </strong>
                 <br />
                 <span style={{ color: "#666" }}>
-                  {place.amenity && `📍 ${place.amenity}`}
-                  {place.shop && `🛍️ ${place.shop}`}
-                  {place.cuisine && ` • ${place.cuisine}`}
+                  {place.type === "supermarket" && "🏪 Supermarket"}
+                  {place.type === "grocery" && "🛒 Grocery Store"}
+                  {place.type === "convenience" && "🏪 Convenience Store"}
+                  {place.type === "wholesale" && "🏬 Wholesale Store"}
+                  {(place.type === "supercenter" ||
+                    place.type === "department_store") &&
+                    "🏢 Supercenter"}
+                  {place.brand && ` • ${place.brand}`}
                 </span>
                 <br />
                 <small style={{ color: "#888" }}>
                   {place.lat.toFixed(4)}, {place.lon.toFixed(4)}
                 </small>
+                <br />
+                <div style={{ marginTop: "8px" }}>
+                  <button
+                    onClick={() =>
+                      window.open(
+                        `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lon}`,
+                        "_blank"
+                      )
+                    }
+                    style={{
+                      padding: "6px 10px",
+                      backgroundColor: "#4285f4",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      marginRight: "6px",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    📍 Google Maps
+                  </button>
+                  <button
+                    onClick={() =>
+                      window.open(
+                        `https://maps.apple.com/?ll=${place.lat},${place.lon}`,
+                        "_blank"
+                      )
+                    }
+                    style={{
+                      padding: "6px 10px",
+                      backgroundColor: "#007aff",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    🍎 Apple Maps
+                  </button>
+                </div>
               </div>
             </Popup>
           </Marker>
@@ -361,8 +572,26 @@ const UserLocationMap: React.FC = () => {
         }}
       >
         <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>
-          Showing {nearbyPlaces.length} grocery stores within 2km
+          Showing {nearbyPlaces.length} stores within{" "}
+          {formatRadius(searchRadius)}
         </p>
+        {nearbyPlaces.length > 0 && (
+          <div style={{ marginTop: "5px", fontSize: "12px", color: "#888" }}>
+            {nearbyPlaces.filter((p) => p.type === "supermarket").length}{" "}
+            supermarkets •{" "}
+            {nearbyPlaces.filter((p) => p.type === "grocery").length} grocery •{" "}
+            {nearbyPlaces.filter((p) => p.type === "convenience").length}{" "}
+            convenience •{" "}
+            {nearbyPlaces.filter((p) => p.type === "wholesale").length}{" "}
+            wholesale •{" "}
+            {
+              nearbyPlaces.filter((p) =>
+                ["supercenter", "department_store"].includes(p.type)
+              ).length
+            }{" "}
+            supercenters
+          </div>
+        )}
       </div>
     </div>
   );
