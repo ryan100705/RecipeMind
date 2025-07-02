@@ -6,7 +6,7 @@ const CreateAccount: React.FC = () => {
   const [status, setStatus] = useState('');
 
   const handleCreate = async () => {
-    const res = await fetch('http://localhost:3000/api/save', {
+    const res = await fetch('http://localhost:3000/api/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),

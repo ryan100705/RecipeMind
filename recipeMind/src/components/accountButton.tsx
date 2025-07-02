@@ -1,12 +1,12 @@
 import React from 'react';
 
-function AccountButton(): JSX.Element {
-  const goToCreateAccount = () => {
-    window.location.href = '/create'; // adjust path if needed
-  };
+type Props = {
+  onCreate: () => void;
+};
 
+function AccountButton({ onCreate }: Props): JSX.Element {
   return (
-    <button onClick={goToCreateAccount}>
+    <button onClick={onCreate}>
       Create Account
     </button>
   );
